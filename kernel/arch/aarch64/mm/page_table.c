@@ -302,7 +302,7 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         set_pte_flags(entry, flags, USER_PTE);
         entry->l2_block.is_table = 0;
         entry->l2_block.is_valid = 1;
-        entry->l1_block.pfn = (pa + mapped) >> 21;
+        entry->l2_block.pfn = (pa + mapped) >> 21;
         mapped += (1u << 21);
         goto Loop;
         }
@@ -318,7 +318,7 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         set_pte_flags(entry, flags, USER_PTE);
         entry->l3_page.is_page = 1;
         entry->l3_page.is_valid = 1;
-        entry->l1_block.pfn = (pa + mapped) >> 12;
+        entry->l3_page.pfn = (pa + mapped) >> 12;
         mapped += (1u << 12);
         goto Loop;
         }
@@ -326,6 +326,7 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         Loop:
         continue;
         }
+        return 0;
 
         /* LAB 2 TODO 3 END */
 }
@@ -363,7 +364,7 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
         index = GET_L1_INDEX(va + mapped);
         entry = &(l1_ptp->ent[index]);
-        entry->l1_block.is_valid = 1;
+        entry->l1_block.is_valid = 0;
         mapped += (1u << 30);
         goto Loop;
         }
@@ -375,7 +376,7 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
         index = GET_L2_INDEX(va + mapped);
         entry = &(l2_ptp->ent[index]);
-        entry->l2_block.is_valid = 1;
+        entry->l2_block.is_valid = 0;
         mapped += (1u << 21);
         goto Loop;
         }
@@ -388,7 +389,7 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
         index = GET_L3_INDEX(va + mapped);
         entry = &(l3_ptp->ent[index]);
-        entry->l3_page.is_valid = 1;
+        entry->l3_page.is_valid = 0;
         mapped += (1u << 12);
         goto Loop;
         }
@@ -396,6 +397,7 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         Loop:
         continue;
         }
+        return 0;
 
         /* LAB 2 TODO 3 END */
 }

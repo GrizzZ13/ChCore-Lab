@@ -87,6 +87,7 @@ static struct page *split_page(struct phys_mem_pool *pool, u64 order,
 
         BUG_ON(page->order < order);
         if(page->order==order) {
+                page->allocated = 1;
                 return page;
         }
         u64 order_tmp = page->order - 1;
