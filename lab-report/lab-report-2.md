@@ -72,3 +72,14 @@ for (vaddr = PERIPHERAL_BASE; vaddr < PHYSMEM_END; vaddr += SIZE_2M) {
 ## 思考题 3：请思考在 init_boot_pt 函数中为什么还要为低地址配置⻚表，并尝试验证⾃⼰的解释。
 
 ## 练习题 4：完成 kernel/mm/buddy.c 中的 split_page 、 buddy_get_pages 、 merge_page 和buddy_free_pages 函数中的 LAB 2 TODO 2 部分，其中 buddy_get_pages ⽤于分配指定阶⼤⼩的连续物理⻚， buddy_free_pages ⽤于释放已分配的连续物理⻚。
+
+```
+size = 8
+size = 0b11000
+addr = 0b10000
+addr = 1000
+合并首地址
+0000
+size = 
+```
+

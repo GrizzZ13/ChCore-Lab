@@ -207,6 +207,46 @@ int query_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t *pa, pte_t **entry)
          * `-ENOMAPPING` if the va is not mapped.
          */
 
+        ptp_t *cur_ptp = (ptp_t *)pgtbl;
+        u32 level = 0;
+        ptp_t *next_ptp;
+        pte_t *pte;
+        int ret = get_next_ptp(cur_ptp, level, va, &next_ptp, &pte, false);
+        while(ret==NORMAL_PTP && level < 3) {
+                cur_ptp = next_ptp;
+                level++;
+                ret = get_next_ptp(cur_ptp, level, va, &next_ptp, &pte, false);
+        }
+        if(ret==BLOCK_PTP || ret==NORMAL_PTP) {
+                paddr_t offset, pfn;
+                switch (level) {
+                        case 1:
+                                BUG_ON(ret!=BLOCK_PTP);
+                                offset = GET_VA_OFFSET_L1(va);
+                                pfn = pte->l1_block.pfn;
+                                *pa = (pfn << L1_INDEX_SHIFT) | offset;
+                                break;
+                        case 2:
+                                BUG_ON(ret!=BLOCK_PTP);
+                                offset = GET_VA_OFFSET_L2(va);
+                                pfn = pte->l2_block.pfn;
+                                *pa = (pfn << L2_INDEX_SHIFT) | offset;
+                                break;
+                        case 3:
+                                BUG_ON(ret!=NORMAL_PTP);
+                                offset = GET_VA_OFFSET_L3(va);
+                                pfn = pte->l3_page.pfn;
+                                *pa = (pfn << L3_INDEX_SHIFT) | offset;
+                                break;
+                        default:
+                                BUG_ON(1);
+                }
+                *entry = pte;
+                return 0;
+        }
+        else {
+                return -ENOMAPPING;
+        }
         /* LAB 2 TODO 3 END */
 }
 
@@ -220,6 +260,72 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
          * pte with the help of `set_pte_flags`. Iterate until all pages are
          * mapped.
          */
+        BUG_ON(va % 0x1000ul != 0);
+        BUG_ON(len % 0x1000ul != 0);
+        ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
+        pte_t *l0_pte, *l1_pte, *l2_pte;
+        pte_t *entry;
+        size_t mapped = 0;
+        u32 index;
+        int ptp_type;
+
+        while(mapped < len) {
+        
+        if(len >= (1 << 30) + mapped)
+                goto Map_1G;
+        else if(len >= (1 << 21) + mapped)
+                goto Map_2M;
+        else
+                goto Map_4K;
+
+        Map_1G:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        index = GET_L1_INDEX(va + mapped);
+        entry = &(l1_ptp->ent[index]);
+        set_pte_flags(entry, flags, USER_PTE);
+        entry->l1_block.is_table = 0;
+        entry->l1_block.is_valid = 1;
+        entry->l1_block.pfn = (pa + mapped) >> 30;
+        mapped += (1u << 30);
+        goto Loop;
+        }
+
+        Map_2M:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        index = GET_L2_INDEX(va + mapped);
+        entry = &(l2_ptp->ent[index]);
+        set_pte_flags(entry, flags, USER_PTE);
+        entry->l2_block.is_table = 0;
+        entry->l2_block.is_valid = 1;
+        entry->l1_block.pfn = (pa + mapped) >> 21;
+        mapped += (1u << 21);
+        goto Loop;
+        }
+        
+        Map_4K:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
+        index = GET_L3_INDEX(va + mapped);
+        entry = &(l3_ptp->ent[index]);
+        set_pte_flags(entry, flags, USER_PTE);
+        entry->l3_page.is_page = 1;
+        entry->l3_page.is_valid = 1;
+        entry->l1_block.pfn = (pa + mapped) >> 12;
+        mapped += (1u << 12);
+        goto Loop;
+        }
+
+        Loop:
+        continue;
+        }
 
         /* LAB 2 TODO 3 END */
 }
@@ -232,6 +338,64 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
          * mark the final level pte as invalid. Iterate until all pages are
          * unmapped.
          */
+
+        BUG_ON(va % 0x1000ul != 0);
+        BUG_ON(len % 0x1000ul != 0);
+        ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
+        pte_t *l0_pte, *l1_pte, *l2_pte;
+        pte_t *entry;
+        size_t mapped = 0;
+        u32 index;
+        int ptp_type;
+
+        while(mapped < len) {
+        
+        if(len >= (1 << 30) + mapped)
+                goto Map_1G;
+        else if(len >= (1 << 21) + mapped)
+                goto Map_2M;
+        else
+                goto Map_4K;
+
+        Map_1G:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        index = GET_L1_INDEX(va + mapped);
+        entry = &(l1_ptp->ent[index]);
+        entry->l1_block.is_valid = 1;
+        mapped += (1u << 30);
+        goto Loop;
+        }
+
+        Map_2M:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        index = GET_L2_INDEX(va + mapped);
+        entry = &(l2_ptp->ent[index]);
+        entry->l2_block.is_valid = 1;
+        mapped += (1u << 21);
+        goto Loop;
+        }
+        
+        Map_4K:
+        {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
+        index = GET_L3_INDEX(va + mapped);
+        entry = &(l3_ptp->ent[index]);
+        entry->l3_page.is_valid = 1;
+        mapped += (1u << 12);
+        goto Loop;
+        }
+
+        Loop:
+        continue;
+        }
 
         /* LAB 2 TODO 3 END */
 }
