@@ -270,6 +270,70 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         int ptp_type;
 
         while(mapped < len) {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
+        index = GET_L3_INDEX(va + mapped);
+        entry = &(l3_ptp->ent[index]);
+        set_pte_flags(entry, flags, USER_PTE);
+        entry->l3_page.is_page = 1;
+        entry->l3_page.is_valid = 1;
+        entry->l3_page.pfn = (pa + mapped) >> 12;
+        mapped += (1u << 12);
+        }
+        return 0;
+
+        /* LAB 2 TODO 3 END */
+}
+
+int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
+{
+        /* LAB 2 TODO 3 BEGIN */
+        /*
+         * Hint: Walk through each level of page table using `get_next_ptp`,
+         * mark the final level pte as invalid. Iterate until all pages are
+         * unmapped.
+         */
+
+        BUG_ON(va % 0x1000ul != 0);
+        BUG_ON(len % 0x1000ul != 0);
+        ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
+        pte_t *l0_pte, *l1_pte, *l2_pte;
+        pte_t *entry;
+        size_t mapped = 0;
+        u32 index;
+        int ptp_type;
+
+        while(mapped < len) {
+        l0_ptp = (ptp_t*)pgtbl;
+        ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
+        ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
+        ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
+        index = GET_L3_INDEX(va + mapped);
+        entry = &(l3_ptp->ent[index]);
+        entry->l3_page.is_valid = 0;
+        mapped += (1u << 12);
+        }
+        return 0;
+
+        /* LAB 2 TODO 3 END */
+}
+
+int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
+                            vmr_prop_t flags)
+{
+        /* LAB 2 TODO 4 BEGIN */
+        BUG_ON(va % 0x1000ul != 0);
+        BUG_ON(len % 0x1000ul != 0);
+        ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
+        pte_t *l0_pte, *l1_pte, *l2_pte;
+        pte_t *entry;
+        size_t mapped = 0;
+        u32 index;
+        int ptp_type;
+
+        while(mapped < len) {
         
         if(len >= (1 << 30) + mapped)
                 goto Map_1G;
@@ -328,20 +392,12 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         }
         return 0;
 
-        /* LAB 2 TODO 3 END */
+        /* LAB 2 TODO 4 END */
 }
 
-int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
+int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
 {
-        /* LAB 2 TODO 3 BEGIN */
-        /*
-         * Hint: Walk through each level of page table using `get_next_ptp`,
-         * mark the final level pte as invalid. Iterate until all pages are
-         * unmapped.
-         */
-
-        BUG_ON(va % 0x1000ul != 0);
-        BUG_ON(len % 0x1000ul != 0);
+        /* LAB 2 TODO 4 BEGIN */
         ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
         pte_t *l0_pte, *l1_pte, *l2_pte;
         pte_t *entry;
@@ -398,21 +454,6 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
         continue;
         }
         return 0;
-
-        /* LAB 2 TODO 3 END */
-}
-
-int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
-                            vmr_prop_t flags)
-{
-        /* LAB 2 TODO 4 BEGIN */
-
-        /* LAB 2 TODO 4 END */
-}
-
-int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
-{
-        /* LAB 2 TODO 4 BEGIN */
 
         /* LAB 2 TODO 4 END */
 }

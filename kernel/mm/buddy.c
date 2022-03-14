@@ -147,19 +147,21 @@ static struct page *merge_page(struct phys_mem_pool *pool, struct page *page)
                 return page;
         }
         struct page *buddy = get_buddy_chunk(pool, page);
-        if(buddy == NULL || buddy->allocated) {
+        if(buddy == NULL || buddy->allocated || page->order!=buddy->order) {
                 list_add(&(page->node), &(pool->free_lists[order].free_list));
                 pool->free_lists[order].nr_free++;
                 return page;
         }
-        else{
-                BUG_ON(page->order!=buddy->order);
+        else if(page->order==buddy->order) {
                 list_del(&(buddy->node));
                 pool->free_lists[order].nr_free--;
                 u64 addr = (u64)page_to_virt(page) & (u64)page_to_virt(buddy);
                 struct page* upper_page = virt_to_page((void*)addr);
                 upper_page->order = order + 1;
                 return merge_page(pool, upper_page);
+        }
+        else {
+                BUG_ON(1);
         }
 
         /* LAB 2 TODO 2 END */

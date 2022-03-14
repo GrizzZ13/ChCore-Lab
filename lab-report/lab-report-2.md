@@ -73,13 +73,12 @@ for (vaddr = PERIPHERAL_BASE; vaddr < PHYSMEM_END; vaddr += SIZE_2M) {
 
 ## 练习题 4：完成 kernel/mm/buddy.c 中的 split_page 、 buddy_get_pages 、 merge_page 和buddy_free_pages 函数中的 LAB 2 TODO 2 部分，其中 buddy_get_pages ⽤于分配指定阶⼤⼩的连续物理⻚， buddy_free_pages ⽤于释放已分配的连续物理⻚。
 
-```
-size = 8
-size = 0b11000
-addr = 0b10000
-addr = 1000
-合并首地址
-0000
-size = 
-```
+## 练习题 5：完成 kernel/arch/aarch64/mm/page_table.c 中的query_in_pgtbl 、 map_range_in_pgtbl 、 unmap_range_in_pgtbl 函数中的 LAB 2 TODO 3 部分，分别实现⻚表查询、映射、取消映射操作。
 
+## 练习题 6：在上⼀个练习的函数中⽀持⼤⻚（2M、1G ⻚）映射，可假设取消映射的地址范围⼀定是某次映射的完整地址范围，即不会先映射⼀⼤块，再取消映射其中⼀⼩块。
+
+## 思考题 7：阅读 Arm Architecture Reference Manual，思考要在操作系统中⽀持写时拷⻉（Copy-on Write，CoW） 13 需要配置⻚表描述符的哪个/哪些字段，并在发⽣缺⻚异常（实际上是 permission fault）时如何处理。
+
+## 思考题 8：为了简单起⻅，在 ChCore 实验中没有为内核⻚表使⽤细粒度的映射，⽽是直接沿⽤了启动时的粗粒度⻚表，请思考这样做有什么问题。
+
+## 挑战题 9：使⽤前⾯实现的 page_table.c 中的函数，在内核启动后重新配置内核⻚表，进⾏细粒度的映射。
