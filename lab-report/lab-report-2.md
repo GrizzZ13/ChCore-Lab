@@ -520,23 +520,88 @@ Copy-on-Write是通过access control进行配置的，可以设置AP字段为Rea
 
  可能会产生很多内存碎片，减少内存的利用率
 
+程序有诸如data、bss、text等多个段，这些段的权限是不同的，不能用一个粗粒度的映射一概而论
+
 ## 挑战题 9：使⽤前⾯实现的 page_table.c 中的函数，在内核启动后重新配置内核⻚表，进⾏细粒度的映射。
 
 ```c
-// ttbr0_l0 virtual addr
-u64 ttbr1_l0 = get_pages(0);
+// ttbr1_el1 virtual addr
+u64 ttbr1_el1 = get_pages(0);
+volatile u64 a = 1;
 vmr_prop_t flag1, flag2, flag3;
 flag1 = 0;
 flag2 = VMR_DEVICE;
 flag3 = VMR_DEVICE;
-map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000, 0x0, 0x3f000000ul, flag1);
-map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x3f000000ul, 0x3f000000ul, 0x40000000ul - 0x3f000000ul, flag2);
-map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x40000000ul, 0x40000000ul, 0x40000000ul, flag3);
-u64 phy_addr = virt_to_phys(ttbr1_l0);
-// TODO : inline assemble code
-asm volatile("msr ttbr0_el1, %[value]" : :[value] "r" (phy_addr) :);
+map_range_in_pgtbl(ttbr1_el1, 0xffffff0000000000, 0x0, 0x3f000000, flag1);
+map_range_in_pgtbl(ttbr1_el1, 0xffffff003f000000, 0x3f000000ul, 0x1000000ul, flag2);
+map_range_in_pgtbl(ttbr1_el1, 0xffffff0040000000, 0x40000000ul, 0x40000000ul, flag3);
+u64 phy_addr = virt_to_phys(ttbr1_el1);
+asm volatile("msr ttbr1_el1, %[value]" : :[value] "r" (phy_addr));
 flush_tlb_all();
-kinfo("remap finished\n");
+kinfo("[remap] remap finished\n");
 ```
 
 在`mm_init`函数的最后加入以上代码，实现对内核页表的细粒度重映射。
+
+注意，在`set_pte_flags`中非常容易出错，需要将`PXN`设置为`false`，以下是修改过后的函数
+
+```c
+static int set_pte_flags(pte_t *entry, vmr_prop_t flags, int kind)
+{
+        if(kind == KERNEL_PTE) {
+                // attention : set PXN false
+                // kernel may execute in previleged permission
+                entry->l3_page.PXN = AARCH64_MMU_ATTR_PAGE_PX;
+                entry->l3_page.UXN = AARCH64_MMU_ATTR_PAGE_UXN;
+                entry->l3_page.AF = AARCH64_MMU_ATTR_PAGE_AF_ACCESSED;
+                entry->l3_page.nG = 1;
+                entry->l3_page.SH = INNER_SHAREABLE;
+                if (flags & VMR_DEVICE) {
+                        entry->l3_page.attr_index = DEVICE_MEMORY;
+                        entry->l3_page.SH = 0;
+                } else if (flags & VMR_NOCACHE) {
+                        entry->l3_page.attr_index = NORMAL_MEMORY_NOCACHE;
+                } else {
+                        entry->l3_page.attr_index = NORMAL_MEMORY;
+                }
+                return 0;
+        }
+
+        /*
+         * Current access permission (AP) setting:
+         * Mapped pages are always readable (No considering XOM).
+         * EL1 can directly access EL0 (No restriction like SMAP
+         * as ChCore is a microkernel).
+         */
+        if (flags & VMR_WRITE)
+                entry->l3_page.AP = AARCH64_MMU_ATTR_PAGE_AP_HIGH_RW_EL0_RW;
+        else
+                entry->l3_page.AP = AARCH64_MMU_ATTR_PAGE_AP_HIGH_RO_EL0_RO;
+
+        if (flags & VMR_EXEC)
+                entry->l3_page.UXN = AARCH64_MMU_ATTR_PAGE_UX;
+        else
+                entry->l3_page.UXN = AARCH64_MMU_ATTR_PAGE_UXN;
+
+        // EL1 cannot directly execute EL0 accessiable region.
+        entry->l3_page.PXN = AARCH64_MMU_ATTR_PAGE_PXN;
+        // Set AF (access flag) in advance.
+        entry->l3_page.AF = AARCH64_MMU_ATTR_PAGE_AF_ACCESSED;
+        // Mark the mapping as not global
+        entry->l3_page.nG = 1;
+        // Mark the mappint as inner sharable
+        entry->l3_page.SH = INNER_SHAREABLE;
+        // Set the memory type
+        if (flags & VMR_DEVICE) {
+                entry->l3_page.attr_index = DEVICE_MEMORY;
+                entry->l3_page.SH = 0;
+        } else if (flags & VMR_NOCACHE) {
+                entry->l3_page.attr_index = NORMAL_MEMORY_NOCACHE;
+        } else {
+                entry->l3_page.attr_index = NORMAL_MEMORY;
+        }
+
+        return 0;
+}
+```
+

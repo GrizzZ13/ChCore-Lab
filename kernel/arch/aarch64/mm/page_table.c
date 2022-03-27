@@ -18,13 +18,30 @@ void set_page_table(paddr_t pgtbl)
 }
 
 #define USER_PTE 0
+#define KERNEL_PTE 1
 /*
  * the 3rd arg means the kind of PTE.
  */
 static int set_pte_flags(pte_t *entry, vmr_prop_t flags, int kind)
 {
-        // Only consider USER PTE now.
-        BUG_ON(kind != USER_PTE);
+        if(kind == KERNEL_PTE) {
+                // attention : set PXN false
+                // kernel may execute in previleged permission
+                entry->l3_page.PXN = AARCH64_MMU_ATTR_PAGE_PX;
+                entry->l3_page.UXN = AARCH64_MMU_ATTR_PAGE_UXN;
+                entry->l3_page.AF = AARCH64_MMU_ATTR_PAGE_AF_ACCESSED;
+                entry->l3_page.nG = 1;
+                entry->l3_page.SH = INNER_SHAREABLE;
+                if (flags & VMR_DEVICE) {
+                        entry->l3_page.attr_index = DEVICE_MEMORY;
+                        entry->l3_page.SH = 0;
+                } else if (flags & VMR_NOCACHE) {
+                        entry->l3_page.attr_index = NORMAL_MEMORY_NOCACHE;
+                } else {
+                        entry->l3_page.attr_index = NORMAL_MEMORY;
+                }
+                return 0;
+        }
 
         /*
          * Current access permission (AP) setting:
@@ -267,6 +284,13 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         size_t mapped = 0;
         u32 index;
         int ptp_type;
+        int kind;
+        if(va >= KBASE) {
+                kind = KERNEL_PTE;
+        }
+        else{
+                kind = USER_PTE;
+        }
 
         while(mapped < len) {
         l0_ptp = (ptp_t*)pgtbl;
@@ -275,7 +299,7 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
         index = GET_L3_INDEX(va + mapped);
         entry = &(l3_ptp->ent[index]);
-        set_pte_flags(entry, flags, USER_PTE);
+        set_pte_flags(entry, flags, kind);
         entry->l3_page.is_page = 1;
         entry->l3_page.is_valid = 1;
         entry->l3_page.pfn = (pa + mapped) >> 12;
@@ -296,7 +320,6 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
          */
 
         BUG_ON(va % 0x1000ul != 0);
-        BUG_ON(len % 0x1000ul != 0);
         ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
         pte_t *l0_pte, *l1_pte, *l2_pte;
         pte_t *entry;
@@ -331,6 +354,13 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         size_t mapped = 0;
         u32 index;
         int ptp_type;
+        int kind;
+        if(va >= KBASE) {
+                kind = KERNEL_PTE;
+        }
+        else{
+                kind = USER_PTE;
+        }
 
         while(mapped < len) {
         
@@ -347,7 +377,7 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         ptp_type = get_next_ptp(l0_ptp, 0, va + mapped, &l1_ptp, &l0_pte, true);
         index = GET_L1_INDEX(va + mapped);
         entry = &(l1_ptp->ent[index]);
-        set_pte_flags(entry, flags, USER_PTE);
+        set_pte_flags(entry, flags, kind);
         entry->l1_block.is_table = 0;
         entry->l1_block.is_valid = 1;
         entry->l1_block.pfn = (pa + mapped) >> 30;
@@ -362,7 +392,7 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         ptp_type = get_next_ptp(l1_ptp, 1, va + mapped, &l2_ptp, &l1_pte, true);
         index = GET_L2_INDEX(va + mapped);
         entry = &(l2_ptp->ent[index]);
-        set_pte_flags(entry, flags, USER_PTE);
+        set_pte_flags(entry, flags, kind);
         entry->l2_block.is_table = 0;
         entry->l2_block.is_valid = 1;
         entry->l2_block.pfn = (pa + mapped) >> 21;
@@ -378,7 +408,7 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
         ptp_type = get_next_ptp(l2_ptp, 2, va + mapped, &l3_ptp, &l2_pte, true);
         index = GET_L3_INDEX(va + mapped);
         entry = &(l3_ptp->ent[index]);
-        set_pte_flags(entry, flags, USER_PTE);
+        set_pte_flags(entry, flags, kind);
         entry->l3_page.is_page = 1;
         entry->l3_page.is_valid = 1;
         entry->l3_page.pfn = (pa + mapped) >> 12;
