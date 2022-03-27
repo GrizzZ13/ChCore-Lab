@@ -521,3 +521,22 @@ Copy-on-Write是通过access control进行配置的，可以设置AP字段为Rea
  可能会产生很多内存碎片，减少内存的利用率
 
 ## 挑战题 9：使⽤前⾯实现的 page_table.c 中的函数，在内核启动后重新配置内核⻚表，进⾏细粒度的映射。
+
+```c
+// ttbr0_l0 virtual addr
+u64 ttbr1_l0 = get_pages(0);
+vmr_prop_t flag1, flag2, flag3;
+flag1 = 0;
+flag2 = VMR_DEVICE;
+flag3 = VMR_DEVICE;
+map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000, 0x0, 0x3f000000ul, flag1);
+map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x3f000000ul, 0x3f000000ul, 0x40000000ul - 0x3f000000ul, flag2);
+map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x40000000ul, 0x40000000ul, 0x40000000ul, flag3);
+u64 phy_addr = virt_to_phys(ttbr1_l0);
+// TODO : inline assemble code
+asm volatile("msr ttbr0_el1, %[value]" : :[value] "r" (phy_addr) :);
+flush_tlb_all();
+kinfo("remap finished\n");
+```
+
+在`mm_init`函数的最后加入以上代码，实现对内核页表的细粒度重映射。

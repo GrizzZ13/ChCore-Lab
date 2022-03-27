@@ -261,7 +261,6 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
          * mapped.
          */
         BUG_ON(va % 0x1000ul != 0);
-        BUG_ON(len % 0x1000ul != 0);
         ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
         pte_t *l0_pte, *l1_pte, *l2_pte;
         pte_t *entry;
