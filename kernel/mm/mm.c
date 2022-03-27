@@ -4,6 +4,7 @@
 #include <common/macro.h>
 #include <mm/buddy.h>
 #include <mm/slab.h>
+#include <mm/kmalloc.h>
 
 extern void parse_mem_map(void);
 
@@ -64,6 +65,21 @@ void mm_init(void)
         void lab2_test_buddy(void);
         lab2_test_buddy();
 #endif /* CHCORE_KERNEL_TEST */
+
+        // ttbr0_l0 virtual addr
+        u64 ttbr1_l0 = get_pages(0);
+        vmr_prop_t flag1, flag2, flag3;
+        flag1 = 0;
+        flag2 = VMR_DEVICE;
+        flag3 = VMR_DEVICE;
+        map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000, 0x0, 0x3f000000ul, flag1);
+        map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x3f000000ul, 0x3f000000ul, 0x40000000ul - 0x3f000000ul, flag2);
+        map_range_in_pgtbl(ttbr1_l0, 0xffffff0000000000 + 0x40000000ul, 0x40000000ul, 0x40000000ul, flag3);
+        u64 phy_addr = virt_to_phys(ttbr1_l0);
+        // TODO : inline assemble code
+        asm volatile("msr ttbr0_el1, %[value]" : :[value] "r" (phy_addr) :);
+        flush_tlb_all();
+        kinfo("remap finished\n");
 
         /* slab alloctor for allocating small memory regions */
         init_slab();
