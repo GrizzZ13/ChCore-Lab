@@ -75,7 +75,7 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
         struct elf_file *elf;
         vmr_prop_t flags;
         int i, r;
-        size_t seg_sz, seg_map_sz;
+        size_t mem_sz, file_sz, seg_map_sz;
         u64 p_vaddr;
 
         int *pmo_cap;
@@ -93,10 +93,18 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
         for (i = 0; i < elf->header.e_phnum; ++i) {
                 pmo_cap[i] = -1;
                 if (elf->p_headers[i].p_type == PT_LOAD) {
-                        seg_sz = elf->p_headers[i].p_memsz;
+                        mem_sz = elf->p_headers[i].p_memsz;
                         p_vaddr = elf->p_headers[i].p_vaddr;
                         /* LAB 3 TODO BEGIN */
-
+                        file_sz = elf->p_headers[i].p_filesz;
+                        flags = PFLAGS2VMRFLAGS(elf->p_headers[i].p_flags);
+                        seg_map_sz = ROUND_UP(p_vaddr + mem_sz, PAGE_SIZE) - ROUND_DOWN(p_vaddr, PAGE_SIZE);
+                        create_pmo(seg_map_sz, PMO_DATA, cap_group, &pmo);
+                        ret = vmspace_map_range(vmspace, p_vaddr, seg_map_sz, flags, pmo);
+                        /* load data */
+                        memcpy(phys_to_virt(pmo->start), bin + elf->p_headers[i].p_offset, file_sz);
+                        /* fill bss with zero */
+                        memset(phys_to_virt(pmo->start) + file_sz, 0, mem_sz - file_sz);
                         /* LAB 3 TODO END */
                         BUG_ON(ret != 0);
                 }
@@ -387,7 +395,7 @@ void sys_thread_exit(void)
         printk("\nBack to kernel.\n");
 #endif
         /* LAB 3 TODO BEGIN */
-
+        current_thread = NULL;
         /* LAB 3 TODO END */
         printk("Lab 3 hang.\n");
         while (1) {
