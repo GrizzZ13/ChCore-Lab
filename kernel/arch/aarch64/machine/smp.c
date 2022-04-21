@@ -24,7 +24,8 @@ void enable_smp_cores(paddr_t boot_flag)
                  * _start. Then, what's the flag?
                  */
                 /* LAB 4 TODO BEGIN */
-
+                /* set secondary boot flag non-zero */
+                secondary_boot_flag[i] = 1;
                 /* LAB 4 TODO END */
 
                 flush_dcache_area((u64)secondary_boot_flag,
@@ -36,7 +37,9 @@ void enable_smp_cores(paddr_t boot_flag)
                  * before activating the next one
                  */
                 /* LAB 4 TODO BEGIN */
-
+                while(cpu_status[i] != cpu_run) {
+                        ;
+                }
                 /* LAB 4 TODO END */
                 if (cpu_status[i] == cpu_run)
                         kinfo("CPU %d is active\n", i);
