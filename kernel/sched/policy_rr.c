@@ -161,6 +161,9 @@ int rr_sched(void)
                         current_thread->thread_ctx->state = TS_EXIT;
                         current_thread->thread_ctx->thread_exit_state = TE_EXITED;
                 }
+                else if (current_thread->thread_ctx->state == TS_WAITING){
+                        // do not append this waiting thread!
+                }
                 else if(current_thread->thread_ctx->sc->budget > 0) {
                         return -1;
                 }
