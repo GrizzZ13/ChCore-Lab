@@ -87,12 +87,35 @@ void init_boot_pt(void)
         /* TTBR1_EL1 0-1G */
         /* LAB 2 TODO 1 BEGIN */
         /* Step 1: set L0 and L1 page table entry */
-
+        u64 paddr = PHYSMEM_START;
+        vaddr = KERNEL_VADDR;
+        boot_ttbr1_l0[GET_L0_INDEX(vaddr)] = ((u64)boot_ttbr1_l1) | IS_TABLE
+                                             | IS_VALID | NG;
+        boot_ttbr1_l1[GET_L1_INDEX(vaddr)] = ((u64)boot_ttbr1_l2) | IS_TABLE
+                                             | IS_VALID | NG;
 
         /* Step 2: map PHYSMEM_START ~ PERIPHERAL_BASE with 2MB granularity */
-
+        for (; paddr < PERIPHERAL_BASE; paddr += SIZE_2M, vaddr += SIZE_2M) {
+                boot_ttbr1_l2[GET_L2_INDEX(vaddr)] =
+                        (paddr)
+                        | UXN /* Unprivileged execute never */
+                        | ACCESSED /* Set access flag */
+                        | NG /* Mark as not global */
+                        | INNER_SHARABLE /* Sharebility */
+                        | NORMAL_MEMORY /* Normal memory */
+                        | IS_VALID;
+        }
 
         /* Step 2: map PERIPHERAL_BASE ~ PHYSMEM_END with 2MB granularity */
+        for (paddr = PERIPHERAL_BASE; paddr < PHYSMEM_END; paddr += SIZE_2M, vaddr += SIZE_2M) {
+                boot_ttbr1_l2[GET_L2_INDEX(vaddr)] =
+                        (paddr)
+                        | UXN /* Unprivileged execute never */
+                        | ACCESSED /* Set access flag */
+                        | NG /* Mark as not global */
+                        | DEVICE_MEMORY /* Device memory */
+                        | IS_VALID;
+        }
 
         /* LAB 2 TODO 1 END */
 

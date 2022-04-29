@@ -38,7 +38,9 @@ void handle_entry_c(int type, u64 esr, u64 address)
 {
         /* Acquire the big kernel lock, if the exception is not from kernel */
         /* LAB 4 TODO BEGIN */
-
+        if (type >= SYNC_EL0_64) {
+                lock_kernel();
+        }
         /* LAB 4 TODO END */
 
         /* ec: exception class */
@@ -142,10 +144,10 @@ void handle_irq(int type)
          *	The irq is not from the kernel
          * 	The thread being interrupted is an idle thread.
          */
-        if (type >= SYNC_EL0_64
-            || current_thread->thread_ctx->type == TYPE_IDLE) {
+        if (type == IRQ_EL0_64 || type == IRQ_EL0_32
+            || (current_thread && current_thread->thread_ctx->type == TYPE_IDLE)) {
                 /* LAB 4 TODO BEGIN */
-
+                lock_kernel();
                 /* LAB 4 TODO END */
         }
 

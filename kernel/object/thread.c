@@ -88,7 +88,7 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
         struct elf_file *elf;
         vmr_prop_t flags;
         int i, r;
-        size_t seg_sz, seg_map_sz;
+        size_t mem_sz, file_sz, seg_map_sz;
         u64 p_vaddr;
 
         int *pmo_cap;
@@ -106,10 +106,22 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
         for (i = 0; i < elf->header.e_phnum; ++i) {
                 pmo_cap[i] = -1;
                 if (elf->p_headers[i].p_type == PT_LOAD) {
-                        seg_sz = elf->p_headers[i].p_memsz;
+                        mem_sz = elf->p_headers[i].p_memsz;
                         p_vaddr = elf->p_headers[i].p_vaddr;
+                        file_sz = elf->p_headers[i].p_filesz;
                         /* LAB 3 TODO BEGIN */
-
+                        u64 vaddr_start = ROUND_DOWN(p_vaddr, PAGE_SIZE);
+                        u64 vaddr_end = ROUND_UP(p_vaddr + mem_sz, PAGE_SIZE);
+                        flags = PFLAGS2VMRFLAGS(elf->p_headers[i].p_flags);
+                        seg_map_sz = vaddr_end - vaddr_start;
+                        create_pmo(seg_map_sz, PMO_DATA, cap_group, &pmo);
+                        ret = vmspace_map_range(vmspace, vaddr_start, seg_map_sz, flags, pmo);
+                        /* load data */
+                        u64 pmo_start = phys_to_virt(pmo->start) + p_vaddr - vaddr_start;
+                        memcpy(pmo_start, bin + elf->p_headers[i].p_offset, file_sz);
+                        /* fill bss with zero */
+                        BUG_ON(mem_sz < file_sz);
+                        memset(pmo_start + file_sz, 0, mem_sz - file_sz);
                         /* LAB 3 TODO END */
                         BUG_ON(ret != 0);
                 }
@@ -399,7 +411,7 @@ void sys_thread_exit(void)
         printk("\nBack to kernel.\n");
 #endif
         /* LAB 3 TODO BEGIN */
-
+        current_thread->thread_ctx->thread_exit_state = TE_EXITING;
         /* LAB 3 TODO END */
         /* Reschedule */
         sched();
@@ -436,7 +448,7 @@ int sys_set_affinity(u64 thread_cap, s32 aff)
         }
 
         /* LAB 4 TODO BEGIN */
-
+        thread->thread_ctx->affinity = aff;
         /* LAB 4 TODO END */
         if (thread_cap != -1)
                 obj_put((void *)thread);
@@ -459,7 +471,7 @@ s32 sys_get_affinity(u64 thread_cap)
         if (thread == NULL)
                 return -ECAPBILITY;
         /* LAB 4 TODO BEGIN */
-
+        aff = thread->thread_ctx->affinity;
         /* LAB 4 TODO END */
 
         if (thread_cap != -1)

@@ -29,6 +29,7 @@
 /* X: execution permission. U: unprivileged. P: privileged. */
 #define AARCH64_MMU_ATTR_PAGE_UX  (0)
 #define AARCH64_MMU_ATTR_PAGE_UXN (1)
+#define AARCH64_MMU_ATTR_PAGE_PX  (0)
 #define AARCH64_MMU_ATTR_PAGE_PXN (1)
 
 /* Access flag bit. */

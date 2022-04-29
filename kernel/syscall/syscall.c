@@ -38,14 +38,14 @@ void sys_null_placeholder(long arg)
 void sys_putc(char ch)
 {
         /* LAB 3 TODO BEGIN */
-
+        uart_send(ch);
         /* LAB 3 TODO END */
 }
 
 u32 sys_getc(void)
 {
         /* LAB 3 TODO BEGIN */
-
+        uart_recv();
         /* LAB 3 TODO END */
 }
 
@@ -83,7 +83,7 @@ u32 sys_get_cpu_id()
 {
         u32 cpuid = 0;
         /* LAB 4 TODO BEGIN */
-
+        asm volatile("mrs %0, tpidr_el1" : "=r"(cpuid));
         /* LAB 4 TODO END */
         return cpuid;
 }
