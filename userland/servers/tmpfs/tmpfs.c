@@ -152,6 +152,15 @@ static int tfs_mknod(struct inode *dir, const char *name, size_t len, int mkdir)
 		return -ENOENT;
 	}
 	/* LAB 5 TODO BEGIN */
+	if(mkdir==true) {
+		inode = new_dir();
+	}
+	else {
+		inode = new_reg();
+	}
+	inode->size = 0;
+	dent = new_dent(inode, name, len);
+	htable_add(&(dir->dentries), dent->name.hash, &(dent->node));
 
 	/* LAB 5 TODO END */
 
@@ -222,6 +231,46 @@ int tfs_namex(struct inode **dirat, const char **name, int mkdir_p)
 	// `tfs_lookup` and `tfs_mkdir` are useful here
 
 	/* LAB 5 TODO BEGIN */
+
+	char *tmp = *name;
+	i = 0;
+	while(tmp[i]!='\0' && tmp[i]!='/')
+		i++;
+	strncpy(buff, tmp, i);
+	buff[i] = '\0';
+	dent = tfs_lookup(*dirat, buff, i);
+	// whether the dentry exists or not?
+	if(dent==NULL) {
+		// create intermediate directory entry
+		if(mkdir_p==true && tmp[i]=='/') {
+			tfs_mkdir(*dirat, buff, i);
+			dent = tfs_lookup(*dirat, buff, i);
+		}
+		else {
+			return -ENOENT;
+		}
+	}
+	// the named dentry is found or and intermediate dentry is created
+	// the last component and it does not end with '/'
+	if(tmp[i]=='\0') {
+		return 0;
+	}
+	// the last component and it ends with '/'
+	else if(tmp[i]=='/'&&tmp[i+1]=='\0') {
+		*dirat = dent->inode;
+		*name = tmp + i + 1;
+		return 0;
+	}
+	// intermediate path but not a dentry
+	else if(dent->inode->type!=FS_DIR) {
+		return -ENOTDIR;
+	}
+	// intermediate dentry
+	else{
+		*dirat = dent->inode;
+		*name = tmp + i + 1;
+		return tfs_namex(dirat, name, mkdir_p);
+	}
 
 	/* LAB 5 TODO END */
 
@@ -300,10 +349,35 @@ ssize_t tfs_file_write(struct inode * inode, off_t offset, const char *data,
 	void *page;
 
 	/* LAB 5 TODO BEGIN */
+	u64 page_current_count = (inode->size + PAGE_SIZE - 1) / PAGE_SIZE;
+	u64 page_end_count  = (offset + size + PAGE_SIZE - 1) / PAGE_SIZE;
+	inode->size = inode->size > offset + size ? inode->size : offset+size;
+	page_no = offset / PAGE_SIZE;
+	page_off = offset % PAGE_SIZE;
+	size_t written = 0;
+	if(page_end_count > page_current_count) {
+		for(u64 idx = page_current_count;idx < page_end_count;idx++) {
+			page = calloc(1, PAGE_SIZE);
+			radix_add(&inode->data, idx, page);
+		}
+	}
+	for(u64 idx = page_no;idx < page_end_count;++idx) {
+		page = radix_get(&inode->data, idx);
+		if(idx==page_no) {
+			to_write = page_off+size > PAGE_SIZE ? PAGE_SIZE - page_off : size;
+			memcpy(page + page_off, data + written, to_write);
+			written += to_write;
+		}
+		else {
+			to_write = size-written > PAGE_SIZE ? PAGE_SIZE : size-written;
+			memcpy(page, data + written, to_write);
+			written += to_write;
+		}
+	}
 
 	/* LAB 5 TODO END */
 
-	return cur_off - offset;
+	return size;
 }
 
 // read memory from `inode` at `offset` in to `buf` for length is `size`, do not
@@ -322,10 +396,36 @@ ssize_t tfs_file_read(struct inode * inode, off_t offset, char *buff,
 	void *page;
 
 	/* LAB 5 TODO BEGIN */
+	u64 page_current_count = (inode->size + PAGE_SIZE - 1) / PAGE_SIZE;
+	u64 page_end_count  = (offset + size + PAGE_SIZE - 1) / PAGE_SIZE;
+	page_no = offset / PAGE_SIZE;
+	page_off = offset % PAGE_SIZE;
+	size_t have_read = 0;
+	size_t part;
+	if(offset >= inode->size) {
+		to_read = 0;
+	} else if(offset + size > inode->size) {
+		to_read = inode->size - offset;
+	} else {
+		to_read = size;
+	}
 
+	for(u64 idx = page_no;idx < page_end_count;++idx) {
+		page = radix_get(&inode->data, idx);
+		if(idx==page_no) {
+			part = page_off + to_read > PAGE_SIZE ? PAGE_SIZE - page_off : to_read;
+			memcpy(buff + have_read, page + page_off, part);
+			have_read += part;
+		}
+		else {
+			part = to_read - have_read > PAGE_SIZE ? PAGE_SIZE : to_read - have_read;
+			memcpy(buff + have_read, page, part);
+			have_read += part;
+		}
+	}
 	/* LAB 5 TODO END */
 
-	return cur_off - offset;
+	return to_read;
 }
 
 // load the cpio archive into tmpfs with the begin address as `start` in memory
@@ -348,6 +448,34 @@ int tfs_load_image(const char *start)
 
 	for (f = g_files.head.next; f; f = f->next) {
 	/* LAB 5 TODO BEGIN */
+	dirat = tmpfs_root;
+	leaf = f->name;
+	len = 0;
+	int err = tfs_namex(&dirat, &leaf, 1);
+	while(leaf[len]!='\0')
+		len++;
+	if(len==1 && leaf[0]=='.') {
+		continue;
+	}
+	if(err == 0) {
+		if(len==0) {
+			// the last component ends with '/' and it is a directory
+			continue;
+		} else {
+			// the last component should not be a directory
+			dent = tfs_lookup(dirat, leaf, len);
+			BUG_ON(dent==NULL);
+			if(dent->inode->type==FS_DIR) return -EISDIR;
+			size_t written = tfs_file_write(dent->inode, 0, f->data, f->header.c_filesize);
+		}
+	} else if(err == -ENOENT) {
+		// the last component, which is a file, is missing
+		tfs_creat(dirat, leaf, len);
+		dent = tfs_lookup(dirat, leaf, len);
+		size_t written = tfs_file_write(dent->inode, 0, f->data, f->header.c_filesize);
+	} else {
+		BUG_ON(err);
+	}
 
 	/* LAB 5 TODO END */
 	}
