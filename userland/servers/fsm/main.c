@@ -78,6 +78,36 @@ void strip_path(struct mount_point_info_node *mpinfo, char* path) {
 
 /* You could add new functions here as you want. */
 /* LAB 5 TODO BEGIN */
+int transfer_ipc_with_fd(int fd, struct ipc_msg *ipc_msg, struct fs_request *fr, u64 client_badge)
+{
+	int ret;
+	struct ipc_msg *ipc_msg_transfer;
+	struct fs_request *fr_transfer;
+	struct mount_point_info_node *mpinfo = fsm_get_mount_info_withfd(client_badge, fd);
+	ipc_msg_transfer = ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
+	fr_transfer = (struct fs_request*)ipc_get_msg_data(ipc_msg_transfer);
+	memcpy(fr_transfer, fr, sizeof(struct fs_request));
+	ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+	memcpy(ipc_get_msg_data(ipc_msg), ipc_get_msg_data(ipc_msg_transfer), ipc_msg_transfer->data_len);
+	ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+	return ret;
+}
+
+int transfer_ipc_with_pathname(const char *path, struct ipc_msg *ipc_msg, struct fs_request *fr)
+{
+	int ret;
+	struct ipc_msg *ipc_msg_transfer;
+	struct fs_request *fr_transfer;
+	struct mount_point_info_node *mpinfo = get_mount_point(path, strlen(path));
+	strip_path(mpinfo, path);
+	ipc_msg_transfer = ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
+	fr_transfer = (struct fs_request*)ipc_get_msg_data(ipc_msg_transfer);
+	memcpy(fr_transfer, fr, sizeof(struct fs_request));
+	ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+	memcpy(ipc_get_msg_data(ipc_msg), ipc_get_msg_data(ipc_msg_transfer), ipc_msg_transfer->data_len);
+	ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+	return ret;
+}
 
 /* LAB 5 TODO END */
 
@@ -92,6 +122,9 @@ void fsm_server_dispatch(struct ipc_msg *ipc_msg, u64 client_badge)
 
 	/* You could add code here as you want.*/
 	/* LAB 5 TODO BEGIN */
+	int fd;
+	struct ipc_msg *ipc_msg_transfer;
+	struct fs_request *fr_transfer;
 
 	/* LAB 5 TODO END */
 
@@ -113,6 +146,48 @@ void fsm_server_dispatch(struct ipc_msg *ipc_msg, u64 client_badge)
 			break;
 
 		/* LAB 5 TODO BEGIN */
+		case FS_REQ_OPEN:
+			fd = fr->open.new_fd;
+			mpinfo = get_mount_point(fr->open.pathname, strlen(fr->open.pathname));
+			strip_path(mpinfo, fr->open.pathname);
+			ipc_msg_transfer = ipc_create_msg(mpinfo->_fs_ipc_struct, sizeof(struct fs_request), 0);
+			fr_transfer = (struct fs_request*)ipc_get_msg_data(ipc_msg_transfer);
+			memcpy(fr_transfer, fr, sizeof(struct fs_request));
+			ret = ipc_call(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+			memcpy(ipc_get_msg_data(ipc_msg), ipc_get_msg_data(ipc_msg_transfer), ipc_msg_transfer->data_len);
+			ipc_destroy_msg(mpinfo->_fs_ipc_struct, ipc_msg_transfer);
+			fsm_set_mount_info_withfd(client_badge, fd, mpinfo);
+			break;
+		case FS_REQ_CLOSE:
+			ret = transfer_ipc_with_fd(fr->close.fd, ipc_msg, fr, client_badge);
+			break;
+		case FS_REQ_CREAT:
+			ret = transfer_ipc_with_pathname(fr->creat.pathname, ipc_msg, fr);
+			break;
+		case FS_REQ_MKDIR:
+			ret = transfer_ipc_with_pathname(fr->mkdir.pathname, ipc_msg, fr);
+			break;
+		case FS_REQ_RMDIR:
+			ret = transfer_ipc_with_pathname(fr->rmdir.pathname, ipc_msg, fr);
+			break;
+		case FS_REQ_UNLINK:
+			ret = transfer_ipc_with_pathname(fr->unlink.pathname, ipc_msg, fr);
+			break;
+		case FS_REQ_READ:
+			ret = transfer_ipc_with_fd(fr->read.fd, ipc_msg, fr, client_badge);
+			break;
+		case FS_REQ_WRITE:
+			ret = transfer_ipc_with_fd(fr->write.fd, ipc_msg, fr, client_badge);
+			break;
+		case FS_REQ_GET_SIZE:
+			ret = transfer_ipc_with_pathname(fr->getsize.pathname, ipc_msg, fr);
+			break;
+		case FS_REQ_LSEEK:
+			ret = transfer_ipc_with_fd(fr->lseek.fd, ipc_msg, fr, client_badge);
+			break;
+		case FS_REQ_GETDENTS64:
+			ret = transfer_ipc_with_fd(fr->getdents64.fd, ipc_msg, fr, client_badge);
+			break;
 
 		/* LAB 5 TODO END */
 

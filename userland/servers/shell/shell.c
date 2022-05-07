@@ -116,7 +116,7 @@ int readfile(int fd, char *buf, int count)
 		fr_ptr->req = FS_REQ_READ;
 		fr_ptr->read.fd = fd;
 		cnt = MIN(remain, PAGE_SIZE);
-		fr_ptr->getdents64.count = cnt;
+		fr_ptr->read.count = cnt;
 		ret = ipc_call(fs_ipc_struct_for_shell, ipc_msg);
 		if (ret < 0)
 			goto error;
